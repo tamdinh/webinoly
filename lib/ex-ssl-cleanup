@@ -2,5 +2,5 @@
 
 # Let's Encrypt manual mode (for Reverse Proxy sites)
 source /opt/webinoly/lib/general
-sslpath=$(conf_read temp-path)
+[[ -n $(conf_read temp-path) ]] && sslpath=$(conf_read temp-path) || sslpath="/var/www/.webinoly"
 sudo rm -rf $sslpath/.well-known
