@@ -269,12 +269,9 @@ check_exported_conf() {
 			sudo webinoly -server-reset=nginx # If already installed, do a server-reset to load the exported settings
 		elif [[ $(conf_read_exported nginx-tool-bkp) == "true" && $(conf_read_exported nginx-tool-ssl) == "true" ]]; then
 			sudo stack -nginx
-		elif [[ $(conf_read_exported nginx-tool) == "true" ]]; then
-			# Support for old configuration - REMOVE in the future!
-			sudo stack -nginx
 		else
 			sudo stack -nginx -build=light
-			[[ $(conf_read_exported nginx-tool-bkp) == "true" ]] && sudo stack -backups
+			[[ $(conf_read_exported nginx-tool-rclone) == "true" ]] && sudo stack -backups
 			[[ $(conf_read_exported nginx-tool-ssl) == "true" ]] && sudo stack -letsencrypt
 		fi
 	elif [[ $(conf_read_exported nginx) != "true" && $(conf_read_exported nginx-tool-bkp) == "true" ]]; then
@@ -287,9 +284,6 @@ check_exported_conf() {
 			sudo webinoly -server-reset=php # If already installed, do a server-reset to load the exported settings
 		elif [[ $(conf_read_exported php-tool-postfix) == "true" && $(conf_read_exported php-tool-redis) == "true" && $(conf_read_exported php-tool-memcached) == "true" ]]; then
 			sudo stack -php
-		elif [[ $(conf_read_exported php-tool) == "true" ]]; then
-			# Support for old configuration - REMOVE in the future!
-			sudo stack -php
 		else
 			sudo stack -php -build=light
 			[[ $(conf_read_exported php-tool-postfix) == "true" ]] && sudo stack -postfix
@@ -301,9 +295,6 @@ check_exported_conf() {
 	if [[ $(conf_read_exported mysql) == "true" && $(conf_read_exported mysql-tool-pma) == "true" ]]; then
 		# Passwords are imported too, so we don't need to display passwords created during the installation process, because they are replaced.
 		sudo stack -mysql -block-password-display
-	elif [[ $(conf_read_exported mysql-tool) == "true" ]]; then
-			# Support for old configuration - REMOVE in the future!
-			sudo stack -mysql -block-password-display
 	elif [[ $(conf_read_exported mysql) == "true" ]]; then
 		sudo stack -mysql -build=light -block-password-display
 	elif [[ $(conf_read_exported mysql-client) == "true" ]]; then
@@ -334,15 +325,6 @@ check_exported_conf() {
 		if tar -tvf $file --absolute-names | grep -oq "$HOME/.aws/credentials"; then
 			tar -C / -xf $file $HOME/.aws/credentials --absolute-names
 		fi
-		#if [[ $(conf_read mysql) == "true" ]]; then
-		#	if tar -tvf $file --absolute-names | grep -oq "$MYSQL_CONF_PATH/${MYSQL_CONF_PREF}-webinoly-login.cnf"; then
-		#		tar -C / -xf $file $MYSQL_CONF_PATH/${MYSQL_CONF_PREF}-webinoly-login.cnf --absolute-names
-		#	fi
-		#	if tar -tvf $file --absolute-names | grep -oq "$MYSQL_CONF_PATH/${MYSQL_CONF_PREF}-webinoly.cnf"; then
-		#		tar -C / -xf $file $MYSQL_CONF_PATH/${MYSQL_CONF_PREF}-webinoly.cnf --absolute-names
-		#		sudo systemctl restart mysql
-		#	fi
-		#fi
 	fi
 }
 
