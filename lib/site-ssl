@@ -202,7 +202,7 @@ site_ssl_on() {
 		
 		if [[ $(conf_read snap) == "false" ]];  then
 			[[ -z $cronrene ]] && echo '15 3 * * * certbot renew -q' | sudo tee -a /var/spool/cron/crontabs/root > /dev/null
-			[[ -z $cronupgr ]] && echo '@monthly /opt/certbot/bin/pip install --upgrade certbot > /dev/null' | sudo tee -a /var/spool/cron/crontabs/root > /dev/null
+			[[ -z $cronupgr ]] && echo '@monthly /opt/certbot/bin/pip install --upgrade certbot pip > /dev/null' | sudo tee -a /var/spool/cron/crontabs/root > /dev/null
 		else
 			[[ -z $cronrene ]] && echo '15 3 * * 7 certbot renew -q' | sudo tee -a /var/spool/cron/crontabs/root > /dev/null
 		fi
