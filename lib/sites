@@ -1953,12 +1953,22 @@ cloning_site() {
 			edit_wp_db_url $domain "http://${domain}${subfolder}" $subfolder
 		fi
 		
-		if [[ $replace_content != "off" ]]; then
+		if [[ $replace_content != "off" && $(is_wp_installed $domain $subfolder) == "true" ]]; then
 			replace_content="[http://$clone_from,http://$domain]" && wp_replace_content > /dev/null 2>&1
 			replace_content="[https://$clone_from,https://$domain]" && wp_replace_content > /dev/null 2>&1
 			# In case www is forced
 			replace_content="[http://www.$clone_from,http://$domain]" && wp_replace_content > /dev/null 2>&1
 			replace_content="[https://www.$clone_from,https://$domain]" && wp_replace_content > /dev/null 2>&1
+		fi
+
+		# Force-Redirect
+		if [[ $subdomain != "true" ]]; then
+			sudo site $domain -force-redirect=root
+		else
+			# Nginx server directive is malformed after cloned, we need to fix it always...
+			# That's why we use -subdomain=false, to force it even for subdomains...
+			# Note that the new server block is not created by normal 'createsite' function, it's just copied...
+			sudo site $domain -subdomain=false -force-redirect=off > /dev/null 2>&1
 		fi
 		
 		# Set WP Environment variable
@@ -1968,7 +1978,6 @@ cloning_site() {
 	fi
 	
 	# Remove custom settings from cloned site
-	sudo site $domain -subdomain=false -force-redirect=off > /dev/null 2>&1
 	[[ $(is_ssl $clone_from) == "true" ]] && sudo site $domain -ssl=off -revoke=off -no-db-update > /dev/null 2>&1
 	[[ $(conf_read default-site) == $clone_from ]] && remove_nginx_default_server $domain
 	
