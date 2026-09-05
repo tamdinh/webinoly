@@ -865,9 +865,9 @@ createsite() {
 	fi
 
 	# Force redirection "root" is now enabled by default!
-	if [[ $subdomain != "true" && $force_redirect =~ ^(www|root|off)$ && -z $parked && -z $forward ]]; then
+	if [[ $subdomain != "true" && $force_redirect =~ ^(www|root|off)$ && -z $forward ]]; then
 		sudo site $domain -force-redirect=$force_redirect
-	elif [[ $subdomain != "true" && -z $parked && -z $forward ]]; then
+	elif [[ $subdomain != "true" && -z $forward ]]; then
 		sudo site $domain -force-redirect=root
 	fi
 
@@ -1315,16 +1315,16 @@ parked_domain() {
 		exit 1
 	fi
 	
-	createsite
-	
 	# Nginx conf file for the new parked domain
-	sername=$(grep -o "server_name .*;" /etc/nginx/sites-available/$domain)
+	# We use this function to take advantage of all the validations...
+	# Even when we remove the conf content in the next step!
+	createsite > /dev/null 2>&1
 	sudo truncate -s 0 /etc/nginx/sites-available/$domain
 	sudo cat /etc/nginx/sites-available/$parked > /etc/nginx/sites-available/$domain
 	
 	# Just in case: Remove Force-Redirect if enabled!
 	sudo sed -i '/WebinolyWWWredirectStart/,/WebinolyWWWredirectEnd/{/.*/d}' /etc/nginx/sites-available/$domain
-	
+		
 	# Prevent if SSL is enabled in main site and ssl data is copied to parked site causing an error.
 	[[ $(is_ssl $parked) == "true" ]] && sudo site $domain -ssl=off -revoke=off -no-db-update > /dev/null 2>&1
 	
@@ -1334,7 +1334,7 @@ parked_domain() {
 	sudo sed -i "/include apps.d\/$parked-nginx.conf/d" /etc/nginx/sites-available/$domain
 	sudo sed -i "/include \/var\/www\/${parked}\/\*-$(echo $parked | sed "s/[^0-9A-Za-z]/_/g")_parked.conf;/d" /etc/nginx/sites-available/$domain
 	sudo sed -i "s/$(escaped_string $parked)/$domain/g"  /etc/nginx/sites-available/$domain
-	sudo sed -i "/server_name/c \	$sername" /etc/nginx/sites-available/$domain
+	sudo sed -i "/server_name/c \	server_name ${domain};" /etc/nginx/sites-available/$domain # Real server_name will be set in force-redirect below...
 	sudo sed -i "/include apps.d\/.*-proxy.conf;/{s/$domain/$parked/g}"  /etc/nginx/sites-available/$domain
 	sudo sed -i "/root/c \	root /var/www/$parked/htdocs;" /etc/nginx/sites-available/$domain
 	
@@ -1354,6 +1354,16 @@ parked_domain() {
 	sed -i "/include \/var\/www\/${parked}\/\*-$(echo $parked | sed "s/[^0-9A-Za-z]/_/g")_parked.conf;/d" /etc/nginx/sites-available/$parked
 	sed -i "/include \/var\/www\/$parked\/\*-nginx.conf;/a \	include \/var\/www\/${parked}\/\*-$(echo $parked | sed "s/[^0-9A-Za-z]/_/g")_parked.conf;" /etc/nginx/sites-available/$parked
 	sed -i "/include \/var\/www\/$parked\/\*-nginx.conf;/a \	include \/var\/www\/${parked}/*-$(echo $domain | sed "s/[^0-9A-Za-z]/_/g")_parked.conf;" /etc/nginx/sites-available/$domain
+	
+	# Force Redirect
+	if [[ $subdomain != "true" ]]; then
+		sudo site $domain -force-redirect=root
+	else
+		# Nginx server directive is malformed after cloned, we need to fix it always...
+		# That's why we use -subdomain=false, to force it even for subdomains...
+		# Note that the new server block is not created by normal 'createsite' function, it's just copied...
+		sudo site $domain -subdomain=false -force-redirect=off > /dev/null 2>&1
+	fi
 	
 	# WordPress Domain Mapping
 	if [[ $domain_mapping_wp_id == 1  ]]; then
