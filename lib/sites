@@ -1825,12 +1825,12 @@ cloning_site() {
 			fi
 		fi
 	else
+		[[ ! -f /etc/nginx/sites-available/$domain ]] && create_empty_site
 		echo "${blu}Cloning your site! ${dim} Wait...${end}"
 	fi
 	
 	if [[ -n $subfolder ]]; then
 		local subtype=$(is_subfolder $clone_from $subfolder)
-		[[ ! -f /etc/nginx/sites-available/$domain ]] && create_empty_site
 		
 		# WordPress only runs when is called in a recursive way below!
 		if [[ $subtype == "wp" && -n $child ]]; then
@@ -1882,25 +1882,18 @@ cloning_site() {
 			fi
 		fi
 	else
-		if [[ -d /var/www/$clone_from && $EXCLUDE_OTHER_FILESYSTEMS == "true" ]]; then
-			sudo cp -rx /var/www/$clone_from /var/www/$domain
-			echo "${blu}${dim}Exclude-Other-Filesystems enabled!${end}"
-		elif [[ -d /var/www/$clone_from ]]; then
-			sudo cp -r /var/www/$clone_from /var/www/$domain
-		fi
-	fi
-
-	[[ -d /var/www/$domain ]] && sudo chown -R www-data:www-data /var/www/$domain
-
-	if [[ -z $subfolder && ! -f /etc/nginx/sites-available/$domain ]]; then
 		sudo cp /etc/nginx/sites-available/$clone_from /etc/nginx/sites-available/$domain
-		sudo ln -s /etc/nginx/sites-available/$domain /etc/nginx/sites-enabled/$domain
 		sudo sed -i "s/$clone_from/$domain/g"  /etc/nginx/sites-available/$domain
 		
-		# Fix server_name according to new domain/site.
-		[[ $subdomain == "true" ]] && local sername="server_name $domain;" || local sername="server_name $domain www.$domain;"
-		sudo sed -i "/server_name /c \	$sername" /etc/nginx/sites-available/$domain
+		if [[ -d /var/www/$clone_from && $EXCLUDE_OTHER_FILESYSTEMS == "true" ]]; then
+			sudo cp -rx /var/www/$clone_from/* /var/www/$domain/
+			echo "${blu}${dim}Exclude-Other-Filesystems enabled!${end}"
+		elif [[ -d /var/www/$clone_from ]]; then
+			sudo cp -r /var/www/$clone_from/* /var/www/$domain/
+		fi
 	fi
+	
+	sudo chown -R www-data:www-data /var/www/$domain
 	
 	# Clone Subfolder conf files from apps.d
 	if [[ -z $child ]]; then
@@ -1973,7 +1966,7 @@ cloning_site() {
 
 		# Force-Redirect
 		if [[ $subdomain != "true" ]]; then
-			sudo site $domain -force-redirect=root
+			sudo site $domain -force-redirect=root > /dev/null 2>&1
 		else
 			# Nginx server directive is malformed after cloned, we need to fix it always...
 			# That's why we use -subdomain=false, to force it even for subdomains...
