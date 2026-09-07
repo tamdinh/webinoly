@@ -829,7 +829,7 @@ createsite() {
 	sudo ln -s /etc/nginx/sites-available/$domain /etc/nginx/sites-enabled/$domain
 	
 	# Create data folder for new site
-	if [[ -z $proxy && -z $parked ]]; then
+	if [[ -z $proxy && -z $parked && -z $forward ]]; then
 		if [[ ! -d /var/www/$domain/htdocs ]]; then
 			sudo mkdir -p /var/www/$domain/htdocs
 			[[ $type == [123] ]] && wpinstall
@@ -865,10 +865,12 @@ createsite() {
 	fi
 
 	# Force redirection "root" is now enabled by default!
-	if [[ $subdomain != "true" && $force_redirect =~ ^(www|root|off)$ && -z $forward ]]; then
-		sudo site $domain -force-redirect=$force_redirect
-	elif [[ $subdomain != "true" && -z $forward ]]; then
-		sudo site $domain -force-redirect=root
+	if [[ -z $proxy && -z $parked && -z $forward && -z $clone_from ]]; then
+		if [[ $subdomain != "true" && $force_redirect =~ ^(www|root|off)$ ]]; then
+			sudo site $domain -force-redirect=$force_redirect
+		elif [[ $subdomain != "true" ]]; then
+			sudo site $domain -force-redirect=root
+		fi
 	fi
 
 	# Blackhole default-site should be enabled after the first site is created!
@@ -1318,7 +1320,7 @@ parked_domain() {
 	# Nginx conf file for the new parked domain
 	# We use this function to take advantage of all the validations...
 	# Even when we remove the conf content in the next step!
-	createsite > /dev/null 2>&1
+	createsite
 	sudo truncate -s 0 /etc/nginx/sites-available/$domain
 	sudo cat /etc/nginx/sites-available/$parked > /etc/nginx/sites-available/$domain
 	
@@ -1401,7 +1403,6 @@ forward_domain() {
 	fi 
 	
 	createsite
-	sudo rm -rf /var/www/$domain
 	sudo sed -i '/access_log/,/-nginx.conf;/{/.*/d}' /etc/nginx/sites-available/$domain
 	
 	[[ $http_code != 302 ]] && http_code=301
@@ -1882,7 +1883,8 @@ cloning_site() {
 			fi
 		fi
 	else
-		sudo cp /etc/nginx/sites-available/$clone_from /etc/nginx/sites-available/$domain
+		sudo truncate -s 0 /etc/nginx/sites-available/$domain
+		sudo cat /etc/nginx/sites-available/$clone_from > /etc/nginx/sites-available/$domain
 		sudo sed -i "s/$clone_from/$domain/g"  /etc/nginx/sites-available/$domain
 		
 		if [[ -d /var/www/$clone_from && $EXCLUDE_OTHER_FILESYSTEMS == "true" ]]; then
@@ -1966,7 +1968,7 @@ cloning_site() {
 
 		# Force-Redirect
 		if [[ $subdomain != "true" ]]; then
-			sudo site $domain -force-redirect=root > /dev/null 2>&1
+			sudo site $domain -force-redirect=root
 		else
 			# Nginx server directive is malformed after cloned, we need to fix it always...
 			# That's why we use -subdomain=false, to force it even for subdomains...
