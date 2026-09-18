@@ -122,15 +122,14 @@ else
 fi
 
 # Admin Tools Path
-if [[ -n $(conf_read tools-port) && -n $(conf_read tools-site) && -f /etc/nginx/sites-available/$(conf_read tools-site) ]]; then
+if [[ -n $(conf_read tools-port) && -n $(conf_read tools-site) ]]; then
 	readonly ADMIN_TOOLS_SITE="$(conf_read tools-site):$(conf_read tools-port)"
+elif [[ -n $(conf_read tools-port) ]]; then
+	# We don't check if tools-site value exist because in a clean installation this value is not defined, by default is 'default'
+	readonly ADMIN_TOOLS_SITE="default:$(conf_read tools-port)"
 else
-	if [[ -n $(conf_read tools-port) ]]; then
-		readonly ADMIN_TOOLS_SITE="default:$(conf_read tools-port)"
-	else
-		# Fresh installation, dynvar is empty!
-		readonly ADMIN_TOOLS_SITE="default:${tools_port_default}"
-	fi
+	# Fresh installation, dynvar is empty!
+	readonly ADMIN_TOOLS_SITE="default:${tools_port_default}"
 fi
 
 
