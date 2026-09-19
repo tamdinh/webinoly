@@ -865,7 +865,8 @@ createsite() {
 	fi
 
 	# Force redirection "root" is now enabled by default!
-	if [[ -z $proxy && -z $parked && -z $forward && -z $clone_from ]]; then
+	# Forward, don't make sense. Parked and cloned sites have their own force-redirect...
+	if [[ -z $parked && -z $forward && -z $clone_from ]]; then
 		if [[ $subdomain != "true" && $force_redirect =~ ^(www|root|off)$ ]]; then
 			sudo site $domain -force-redirect=$force_redirect
 		elif [[ $subdomain != "true" ]]; then
@@ -1826,9 +1827,10 @@ cloning_site() {
 			fi
 		fi
 	else
-		[[ ! -f /etc/nginx/sites-available/$domain ]] && create_empty_site
 		echo "${blu}Cloning your site! ${dim} Wait...${end}"
 	fi
+	
+	[[ ! -f /etc/nginx/sites-available/$domain ]] && create_empty_site
 	
 	if [[ -n $subfolder ]]; then
 		local subtype=$(is_subfolder $clone_from $subfolder)
