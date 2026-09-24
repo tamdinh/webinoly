@@ -1,0 +1,120 @@
+#!/bin/bash
+
+# Ensure the script runs as root
+if [ "$EUID" -ne 0 ]; then
+  echo "[-] Please run this script as root or with sudo."
+  exit 1
+fi
+
+ACTION=$1
+DOMAIN=$2
+GIT_URL=$3
+
+# Verify correct command usage
+if [ "$ACTION" != "connect" ] || [ -z "$DOMAIN" ] || [ -z "$GIT_URL" ]; then
+  echo "[-] Error: Invalid usage."
+  echo "Usage: git-deploy connect <domain> <git@github.com:username/repo.git>"
+  echo "Example: git-deploy connect ai.z88.net git@github.com:myuser/myapp.git"
+  exit 1
+fi
+
+# Ensure git is installed
+if ! command -v git &> /dev/null; then
+    echo "[+] Git not found. Installing..."
+    apt update && apt install git -y
+fi
+
+# 1. Automatically handle SSH Deploy Key generation
+SSH_KEY_FILE="/root/.ssh/id_ed25519"
+if [ ! -f "$SSH_KEY_FILE" ]; then
+    echo "[+] Generating an automated SSH Deploy Key for the server..."
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    ssh-keygen -t ed25519 -N "" -f "$SSH_KEY_FILE" -C "deploy@${DOMAIN}"
+fi
+
+# Read the public key to print at the end
+PUBLIC_KEY=$(cat "${SSH_KEY_FILE}.pub")
+
+# Generate a secure random token for the webhook signature
+SECRET_TOKEN=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 24)
+
+echo "[+] Step 1: Creating PHP & MySQL site via Webinoly..."
+site "$DOMAIN" -php -mysql
+
+if [ $? -ne 0 ]; then
+  echo "[-] Webinoly failed to create the site structure. Aborting setup."
+  exit 1
+fi
+
+WEB_DIR="/var/www/${DOMAIN}/htdocs"
+
+echo "[+] Step 2: Preparing web directories..."
+rm -rf "${WEB_DIR:?}"/*
+rm -rf "${WEB_DIR:?}"/.* 2>/dev/null
+
+echo "[+] Step 3: Cloning GitHub Repository into web directory..."
+# Automatically skip host key verification prompt for github
+ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null
+git clone "$GIT_URL" "$WEB_DIR"
+
+if [ $? -ne 0 ]; then
+  echo "-------------------------------------------------------------------------"
+  echo "[-] INITIAL CLONE FAILED!"
+  echo "This happens because GitHub doesn't know your server's key yet."
+  echo "Please add the SSH Deploy Key below to GitHub, then run the command again."
+  echo "-------------------------------------------------------------------------"
+  echo "🔑 YOUR SSH DEPLOY KEY:"
+  echo "$PUBLIC_KEY"
+  echo "-------------------------------------------------------------------------"
+  exit 1
+fi
+
+echo "[+] Step 4: Generating secure deploy.php automation webhook..."
+DEPLOY_SCRIPT="${WEB_DIR}/deploy.php"
+
+cat <<EOT > "$DEPLOY_SCRIPT"
+<?php
+\$secret = '$SECRET_TOKEN'; 
+
+\$signature = \$_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
+if (!\$signature) {
+    header('HTTP/1.1 403 Forbidden');
+    die('Access denied: Missing signature.');
+}
+
+\$payload = file_get_contents('php://input');
+\$expected_signature = 'sha256=' . hash_hmac('sha256', \$payload, \$secret);
+
+if (hash_equals(\$expected_signature, \$signature)) {
+    echo "Signature verified. Deploying updates for $DOMAIN...\n";
+    
+    // Automatically match whatever branch was cloned
+    \$output = shell_exec('cd $WEB_DIR && git pull 2>&1');
+    echo \$output;
+    
+    // Fix permissions so Nginx can read the updated files immediately
+    shell_exec('chown -R www-data:www-data $WEB_DIR');
+} else {
+    header('HTTP/1.1 403 Forbidden');
+    die('Access denied: Invalid signature.');
+}
+?>
+EOT
+
+echo "[+] Step 5: Finalizing server permissions..."
+chown -R www-data:www-data "/var/www/${DOMAIN}"
+
+echo "========================================================================="
+echo "[SUCCESS] Automation configuration successfully deployed for $DOMAIN!"
+echo "========================================================================="
+echo "STEP A: Copy this SSH Deploy Key to GitHub (Settings -> Deploy Keys):"
+echo "-------------------------------------------------------------------------"
+echo "$PUBLIC_KEY"
+echo "-------------------------------------------------------------------------"
+echo "STEP B: Add this Webhook info to GitHub (Settings -> Webhooks):"
+echo "  1. Payload URL:  https://${DOMAIN}/deploy.php"
+echo "  2. Content type: application/json"
+echo "  3. Secret:       ${SECRET_TOKEN}"
+echo "  4. Trigger:      Just the push event"
+echo "========================================================================="
